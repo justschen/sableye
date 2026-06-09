@@ -34,6 +34,22 @@ else
     echo "==> $BUNDLE is up to date"
 fi
 
-# --- 4. Launch -----------------------------------------------------------
+# --- 4. Relaunch ---------------------------------------------------------
+# `open` won't restart an app that's already running — it just refocuses the
+# old instance, so a freshly built binary would never actually start. Stop any
+# running copy first, then launch the new build. (Notes autosave continuously,
+# so nothing is lost.)
+if pgrep -x "$APP_NAME" >/dev/null 2>&1; then
+    echo "==> Stopping running $APP_NAME"
+    for pid in $(pgrep -x "$APP_NAME" 2>/dev/null); do
+        kill "$pid" 2>/dev/null || true
+    done
+    # Wait for it to exit before relaunching.
+    for _ in 1 2 3 4 5; do
+        pgrep -x "$APP_NAME" >/dev/null 2>&1 || break
+        sleep 0.3
+    done
+fi
+
 echo "==> Launching $BUNDLE"
 open "$BUNDLE"

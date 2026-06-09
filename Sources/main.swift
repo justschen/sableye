@@ -264,6 +264,18 @@ enum MarkdownRenderer {
     }
 }
 
+// MARK: - Floating panel
+
+// A non-activating panel is the key to true cross-Space stickiness. An ordinary
+// NSWindow belonging to a background app cannot draw over *another* app's
+// full-screen Space, so it gets left behind when you swipe. A non-activating
+// floating panel can: it shows over other apps (including their full-screen
+// Spaces) without stealing focus, while still becoming key so you can type.
+final class StickyPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
 // MARK: - App Delegate
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
@@ -303,12 +315,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
 
     private func buildWindow() {
         let frame = NSRect(x: 0, y: 0, width: 640, height: 460)
-        window = NSWindow(
+        let panel = StickyPanel(
             contentRect: frame,
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
+        // Float as a utility panel and keep it alive when the app isn't frontmost.
+        panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.worksWhenModal = true
+        window = panel
         window.title = "Sableye"
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
@@ -323,6 +340,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         window.level = Self.onTopLevel
         window.collectionBehavior = Self.stickyBehavior
         window.hidesOnDeactivate = false
+        // Let the user freely resize the window small in either dimension.
+        window.minSize = NSSize(width: 180, height: 120)
 
         let content = NSView(frame: frame)
         window.contentView = content
@@ -481,6 +500,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         previewScroll.documentView = previewTextView
         content.addSubview(previewScroll)
 
+        // The toolbar's natural width would otherwise force a hard minimum window
+        // width. Make its trailing pin yield (controls clip on the right) and let
+        // it compress, so the window can be dragged narrower freely.
+        let barTrailing = bar.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -14)
+        barTrailing.priority = .defaultHigh
+        bar.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
         NSLayoutConstraint.activate([
             header.topAnchor.constraint(equalTo: content.topAnchor),
             header.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -488,7 +514,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
             header.heightAnchor.constraint(equalToConstant: 64),
 
             bar.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 16),
-            bar.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -14),
+            barTrailing,
             bar.bottomAnchor.constraint(equalTo: header.bottomAnchor, constant: -9),
 
             divider.topAnchor.constraint(equalTo: header.bottomAnchor),
@@ -525,19 +551,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         isHiddenFromCapture = (sender.state == .on)
     }
 
-    // Above full-screen apps so the window stays pinned across Space swipes.
+    // Above full-screen apps so the panel stays pinned across Space swipes.
+    // With a non-activating StickyPanel this level no longer pins the window to
+    // its origin Space, so it follows you everywhere (verified on macOS 26).
     static let onTopLevel = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
 
-    // Follows you across every Space. The critical flag is `.canJoinAllApplications`
-    // (macOS 13+): it lets a floating window join *other* apps' full-screen Spaces,
-    // so swiping between full-screen apps keeps the window visible. `.fullScreenAuxiliary`
-    // alone only covers our own app's full-screen window.
+    // Follows you across every Space. `.canJoinAllSpaces` puts the panel on all
+    // regular desktop Spaces; `.fullScreenAuxiliary` lets it join full-screen
+    // Spaces; and `.canJoinAllApplications` (macOS 13+) extends that to *other*
+    // apps' full-screen Spaces so swiping between full-screen apps keeps it in view.
     static var stickyBehavior: NSWindow.CollectionBehavior {
-        var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .stationary]
+        var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         if #available(macOS 13.0, *) {
             behavior.insert(.canJoinAllApplications)
-        } else {
-            behavior.insert(.fullScreenAuxiliary)
         }
         return behavior
     }
