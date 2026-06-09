@@ -317,11 +317,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         window.setFrameAutosaveName("SableyeWindow")
         window.backgroundColor = NSColor.windowBackgroundColor
 
-        // Stay above other windows and follow you across Spaces / fullscreen apps.
-        // A shielding-level window stays visible even over *another* app's
-        // full-screen Space, so swiping between full-screen apps keeps it pinned.
+        // Stay above other windows and follow you across Spaces *and* other
+        // apps' full-screen Spaces, so swiping between full-screen apps keeps
+        // the window pinned in view.
         window.level = Self.onTopLevel
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        window.collectionBehavior = Self.stickyBehavior
         window.hidesOnDeactivate = false
 
         let content = NSView(frame: frame)
@@ -528,8 +528,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
     // Above full-screen apps so the window stays pinned across Space swipes.
     static let onTopLevel = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
 
+    // Follows you across every Space. The critical flag is `.canJoinAllApplications`
+    // (macOS 13+): it lets a floating window join *other* apps' full-screen Spaces,
+    // so swiping between full-screen apps keeps the window visible. `.fullScreenAuxiliary`
+    // alone only covers our own app's full-screen window.
+    static var stickyBehavior: NSWindow.CollectionBehavior {
+        var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .stationary]
+        if #available(macOS 13.0, *) {
+            behavior.insert(.canJoinAllApplications)
+        } else {
+            behavior.insert(.fullScreenAuxiliary)
+        }
+        return behavior
+    }
+
     @objc private func toggleOnTop(_ sender: NSSwitch) {
         window.level = (sender.state == .on) ? Self.onTopLevel : .normal
+        // Keep the window sticky across Spaces regardless of the on-top toggle.
+        window.collectionBehavior = Self.stickyBehavior
     }
 
     @objc private func changeOpacity(_ sender: NSSlider) {
