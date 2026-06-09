@@ -1,0 +1,75 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024"
+     xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#241634"/>
+      <stop offset="0.55" stop-color="#0d0818"/>
+      <stop offset="1" stop-color="#030206"/>
+    </linearGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.5" r="0.62">
+      <stop offset="0.4" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.78"/>
+    </radialGradient>
+    <radialGradient id="eyeGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#9ff4ff" stop-opacity="0.75"/>
+      <stop offset="0.55" stop-color="#49b6ff" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#49b6ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gemFill" cx="0.42" cy="0.36" r="0.75">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.5" stop-color="#e6edfb"/>
+      <stop offset="1" stop-color="#9fb0d6"/>
+    </radialGradient>
+    <filter id="glow" x="-150%" y="-150%" width="400%" height="400%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softglow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="20"/>
+    </filter>
+    <clipPath id="squircle">
+      <rect x="0" y="0" width="1024" height="1024" rx="230" ry="230"/>
+    </clipPath>
+    <g id="gemEye">
+      <path d="M-42.1 -101.6 L42.1 -101.6 L101.6 -42.1 L101.6 42.1 L42.1 101.6 L-42.1 101.6 L-101.6 42.1 L-101.6 -42.1 Z" fill="url(#gemFill)"/>
+      <g fill="none" stroke="#8893b8" stroke-width="2.4" opacity="0.65" stroke-linejoin="round">
+        <path d="M-42.1 -101.6 L-17.6 -42.5"/>
+        <path d="M42.1 -101.6 L17.6 -42.5"/>
+        <path d="M101.6 -42.1 L42.5 -17.6"/>
+        <path d="M101.6 42.1 L42.5 17.6"/>
+        <path d="M42.1 101.6 L17.6 42.5"/>
+        <path d="M-42.1 101.6 L-17.6 42.5"/>
+        <path d="M-101.6 42.1 L-42.5 17.6"/>
+        <path d="M-101.6 -42.1 L-42.5 -17.6"/>
+      </g>
+      <path d="M-42.1 -101.6 L42.1 -101.6 L17.6 -42.5 L-17.6 -42.5 Z" fill="#ffffff" opacity="0.45"/>
+      <path d="M42.1 101.6 L-42.1 101.6 L-17.6 42.5 L17.6 42.5 Z" fill="#556688" opacity="0.18"/>
+      <path d="M101.6 -42.1 L101.6 42.1 L42.5 17.6 L42.5 -17.6 Z" fill="#33405e" opacity="0.16"/>
+      <path d="M-17.6 -42.5 L17.6 -42.5 L42.5 -17.6 L42.5 17.6 L17.6 42.5 L-17.6 42.5 L-42.5 17.6 L-42.5 -17.6 Z" fill="#ffffff" opacity="0.92"/>
+      <path d="M-17.6 -42.5 L17.6 -42.5 L42.5 -17.6 L42.5 17.6 L17.6 42.5 L-17.6 42.5 L-42.5 17.6 L-42.5 -17.6 Z" fill="none" stroke="#aeb9da" stroke-width="2" opacity="0.6"/>
+      <path d="M-42.1 -101.6 L42.1 -101.6 L101.6 -42.1 L101.6 42.1 L42.1 101.6 L-42.1 101.6 L-101.6 42.1 L-101.6 -42.1 Z" fill="none" stroke="#f4f8ff" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M-44 -50 C-44 -60, -40 -64, -30 -64 C-40 -64, -44 -68, -44 -78 C-44 -68, -48 -64, -58 -64 C-48 -64, -44 -60, -44 -50 Z" fill="#ffffff" filter="url(#glow)"/>
+    </g>
+  </defs>
+  <g clip-path="url(#squircle)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <g fill="#0a0613" opacity="0.9">
+      <ellipse cx="120" cy="180" rx="220" ry="150" transform="rotate(-18 120 180)"/>
+      <ellipse cx="930" cy="240" rx="200" ry="150" transform="rotate(22 930 240)"/>
+      <ellipse cx="160" cy="920" rx="240" ry="160" transform="rotate(20 160 920)"/>
+      <ellipse cx="900" cy="930" rx="240" ry="170" transform="rotate(-20 900 930)"/>
+    </g>
+    <g fill="#cdd6ff">
+      <circle cx="250" cy="250" r="2.5" opacity="0.4"/>
+      <circle cx="800" cy="300" r="2" opacity="0.35"/>
+      <circle cx="780" cy="760" r="2.5" opacity="0.4"/>
+      <circle cx="280" cy="730" r="2" opacity="0.3"/>
+    </g>
+    <rect width="1024" height="1024" fill="url(#vignette)"/>
+    <circle cx="398" cy="470" r="210" fill="url(#eyeGlow)"/>
+    <circle cx="626" cy="470" r="210" fill="url(#eyeGlow)"/>
+    <use xlink:href="#gemEye" href="#gemEye" transform="translate(398 470) rotate(-6) scale(0.92)"/>
+    <use xlink:href="#gemEye" href="#gemEye" transform="translate(626 470) rotate(6) scale(1.0)"/>
+    <rect x="3" y="3" width="1018" height="1018" rx="228" ry="228" fill="none" stroke="#9fb0ff" stroke-opacity="0.16" stroke-width="3"/>
+  </g>
+</svg>
