@@ -278,7 +278,7 @@ final class StickyPanel: NSPanel {
 
 // MARK: - App Delegate
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate, NSWindowDelegate {
     var window: NSWindow!
     var textView: NSTextView!
     var editorScroll: NSScrollView!
@@ -288,8 +288,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
     var statusBadge: BadgeView!
     var hideSwitch: NSSwitch!
     var onTopSwitch: NSSwitch!
+    var opacitySlider: NSSlider!
     var isPreviewMode = false
     var saveTimer: Timer?
+
+    // Compact (icon-only) toolbar shown when the window is too narrow for the
+    // full labeled controls; each labeled control collapses to one icon button.
+    var compactPreviewButton: NSButton!
+    var compactHideButton: NSButton!
+    var compactTopButton: NSButton!
+    var compactOpacityButton: NSButton!
+    var compactOpacitySlider: NSSlider?
+    var opacityPopover: NSPopover?
+    var expandedToolbarItems: [NSView] = []
+    var compactToolbarItems: [NSView] = []
+    var expandedToolbarWidth: CGFloat = 0
+    var isCompactToolbar = false
+    var isOnTop = true
 
     // Whether the window is excluded from screen capture.
     var isHiddenFromCapture = true {
@@ -303,9 +318,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(textView)
+        updateToolbarLayout()
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    // The main UI lives in an NSPanel, which AppKit does *not* count in its
+    // automatic "last window closed" tally. With auto-terminate on, dismissing
+    // any auxiliary window (e.g. the opacity popover) made AppKit believe the
+    // last window had closed and quit the entire app. So we opt out of
+    // auto-terminate and quit explicitly only when the main panel itself closes.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func windowWillClose(_ notification: Notification) {
+        if (notification.object as? NSWindow) === window {
+            NSApp.terminate(nil)
+        }
+    }
 
     func applicationWillTerminate(_ notification: Notification) {
         Store.save(textView.string)
@@ -326,6 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         panel.becomesKeyOnlyIfNeeded = false
         panel.worksWhenModal = true
         window = panel
+        window.delegate = self
         window.title = "Sableye"
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
@@ -411,6 +439,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         opacity.toolTip = "Window opacity"
         opacity.translatesAutoresizingMaskIntoConstraints = false
         opacity.widthAnchor.constraint(equalToConstant: 80).isActive = true
+        opacitySlider = opacity
         let opacityStack = NSStackView(views: [opacityIcon, opacity])
         opacityStack.spacing = 5
         opacityStack.alignment = .centerY
@@ -434,15 +463,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         spacer.translatesAutoresizingMaskIntoConstraints = false
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
+        // Compact icon buttons: each collapses a labeled control into a single
+        // icon button. They stay hidden until the window is too narrow to fit
+        // the full controls (see updateToolbarLayout()).
+        func compactButton(symbol: String, tooltip: String, toggle: Bool, action: Selector) -> NSButton {
+            let b = NSButton()
+            b.translatesAutoresizingMaskIntoConstraints = false
+            b.bezelStyle = .texturedRounded
+            b.setButtonType(toggle ? .toggle : .momentaryPushIn)
+            b.imagePosition = .imageOnly
+            b.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tooltip)
+            b.imageScaling = .scaleProportionallyDown
+            b.toolTip = tooltip
+            b.target = self
+            b.action = action
+            b.isHidden = true
+            b.widthAnchor.constraint(equalToConstant: 30).isActive = true
+            return b
+        }
+
+        compactPreviewButton = compactButton(symbol: "square.and.pencil", tooltip: "Toggle Markdown preview (⇧⌘P)", toggle: true, action: #selector(togglePreviewCompact(_:)))
+        compactHideButton = compactButton(symbol: "eye.slash.fill", tooltip: "Hide from screen sharing (⇧⌘H)", toggle: true, action: #selector(toggleHiddenCompact(_:)))
+        compactHideButton.state = isHiddenFromCapture ? .on : .off
+        compactTopButton = compactButton(symbol: "pin.fill", tooltip: "Keep window above other apps", toggle: true, action: #selector(toggleTopCompact(_:)))
+        compactTopButton.state = isOnTop ? .on : .off
+        compactOpacityButton = compactButton(symbol: "circle.lefthalf.filled", tooltip: "Window opacity", toggle: false, action: #selector(showOpacityPopover(_:)))
+
+        let sep1 = verticalSeparator()
+        let sep2 = verticalSeparator()
+
         bar.addArrangedSubview(statusBadge)
         bar.addArrangedSubview(spacer)
         bar.addArrangedSubview(previewSegment)
-        bar.addArrangedSubview(verticalSeparator())
+        bar.addArrangedSubview(sep1)
         bar.addArrangedSubview(hideStack)
         bar.addArrangedSubview(topStack)
-        bar.addArrangedSubview(verticalSeparator())
+        bar.addArrangedSubview(sep2)
         bar.addArrangedSubview(opacityStack)
+        bar.addArrangedSubview(compactPreviewButton)
+        bar.addArrangedSubview(compactHideButton)
+        bar.addArrangedSubview(compactTopButton)
+        bar.addArrangedSubview(compactOpacityButton)
         header.addSubview(bar)
+
+        expandedToolbarItems = [statusBadge, previewSegment, sep1, hideStack, topStack, sep2, opacityStack]
+        compactToolbarItems = [compactPreviewButton, compactHideButton, compactTopButton, compactOpacityButton]
 
         let divider = NSBox()
         divider.boxType = .separator
@@ -506,6 +571,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         let barTrailing = bar.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -14)
         barTrailing.priority = .defaultHigh
         bar.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // NSStackView guards its content with a *clipping resistance* priority
+        // (default .defaultHigh), which is the real reason the window stopped
+        // shrinking at the toolbar's natural width. Lower it (and hugging) so the
+        // stack will clip its trailing controls instead of pinning a minimum width.
+        bar.setClippingResistancePriority(.defaultLow, for: .horizontal)
+        bar.setHuggingPriority(.defaultLow, for: .horizontal)
 
         NSLayoutConstraint.activate([
             header.topAnchor.constraint(equalTo: content.topAnchor),
@@ -533,6 +604,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         ])
 
         statusBadge.update(hidden: isHiddenFromCapture)
+
+        // Measure the natural width of the full toolbar so we know the point at
+        // which it should collapse to the compact icon buttons.
+        content.layoutSubtreeIfNeeded()
+        expandedToolbarWidth = bar.fittingSize.width
     }
 
     // MARK: Capture state
@@ -543,11 +619,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         window.sharingType = isHiddenFromCapture ? .none : .readOnly
         statusBadge?.update(hidden: isHiddenFromCapture)
         hideSwitch?.state = isHiddenFromCapture ? .on : .off
+        compactHideButton?.state = isHiddenFromCapture ? .on : .off
+        compactHideButton?.image = NSImage(
+            systemSymbolName: isHiddenFromCapture ? "eye.slash.fill" : "eye.fill",
+            accessibilityDescription: isHiddenFromCapture ? "Hidden" : "Visible"
+        )
+    }
+
+    // MARK: Responsive toolbar
+
+    func windowDidResize(_ notification: Notification) {
+        updateToolbarLayout()
+    }
+
+    // Swap the full labeled controls for compact icon buttons once the window is
+    // too narrow to fit them (accounting for the bar's 16pt leading / 14pt
+    // trailing insets). The threshold is the full toolbar's measured width, so
+    // the swap is stable and won't oscillate.
+    private func updateToolbarLayout() {
+        guard let content = window?.contentView, expandedToolbarWidth > 0 else { return }
+        let needCompact = content.bounds.width < expandedToolbarWidth + 30
+        if needCompact == isCompactToolbar { return }
+        isCompactToolbar = needCompact
+        for v in expandedToolbarItems { v.isHidden = needCompact }
+        for v in compactToolbarItems { v.isHidden = !needCompact }
     }
 
     // MARK: Actions
 
     @objc private func toggleHidden(_ sender: NSSwitch) {
+        isHiddenFromCapture = (sender.state == .on)
+    }
+
+    @objc private func toggleHiddenCompact(_ sender: NSButton) {
         isHiddenFromCapture = (sender.state == .on)
     }
 
@@ -569,13 +673,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
     }
 
     @objc private func toggleOnTop(_ sender: NSSwitch) {
-        window.level = (sender.state == .on) ? Self.onTopLevel : .normal
+        setOnTop(sender.state == .on)
+    }
+
+    @objc private func toggleTopCompact(_ sender: NSButton) {
+        setOnTop(sender.state == .on)
+    }
+
+    private func setOnTop(_ on: Bool) {
+        isOnTop = on
+        window.level = on ? Self.onTopLevel : .normal
         // Keep the window sticky across Spaces regardless of the on-top toggle.
         window.collectionBehavior = Self.stickyBehavior
+        onTopSwitch?.state = on ? .on : .off
+        compactTopButton?.state = on ? .on : .off
+        compactTopButton?.image = NSImage(
+            systemSymbolName: on ? "pin.fill" : "pin.slash.fill",
+            accessibilityDescription: "Top"
+        )
     }
 
     @objc private func changeOpacity(_ sender: NSSlider) {
-        window.alphaValue = CGFloat(sender.doubleValue)
+        let value = CGFloat(sender.doubleValue)
+        window.alphaValue = value
+        opacitySlider?.doubleValue = Double(value)
+        compactOpacitySlider?.doubleValue = Double(value)
+    }
+
+    @objc private func showOpacityPopover(_ sender: NSButton) {
+        if opacityPopover == nil {
+            let pop = NSPopover()
+            pop.behavior = .transient
+            let vc = NSViewController()
+            let container = NSView()
+            let icon = NSImageView()
+            icon.image = NSImage(systemSymbolName: "circle.lefthalf.filled", accessibilityDescription: "Opacity")
+            icon.contentTintColor = .secondaryLabelColor
+            icon.translatesAutoresizingMaskIntoConstraints = false
+            let slider = NSSlider(value: Double(window.alphaValue), minValue: 0.3, maxValue: 1.0, target: self, action: #selector(changeOpacity(_:)))
+            slider.controlSize = .small
+            slider.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(icon)
+            container.addSubview(slider)
+            NSLayoutConstraint.activate([
+                icon.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+                icon.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                icon.widthAnchor.constraint(equalToConstant: 14),
+                icon.heightAnchor.constraint(equalToConstant: 14),
+                slider.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),
+                slider.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+                slider.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                slider.widthAnchor.constraint(equalToConstant: 120),
+                container.heightAnchor.constraint(equalToConstant: 40),
+            ])
+            vc.view = container
+            pop.contentViewController = vc
+            pop.contentSize = NSSize(width: 166, height: 40)
+            opacityPopover = pop
+            compactOpacitySlider = slider
+        }
+        compactOpacitySlider?.doubleValue = Double(window.alphaValue)
+        opacityPopover?.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
+        // Mirror the window's capture-hidden state so the popover can't be used
+        // to reveal the app indirectly during screen sharing.
+        if isHiddenFromCapture {
+            opacityPopover?.contentViewController?.view.window?.sharingType = .none
+        }
     }
 
     @objc private func toggleHiddenMenu(_ sender: Any?) {
@@ -590,6 +753,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         setPreviewMode(!isPreviewMode)
     }
 
+    @objc private func togglePreviewCompact(_ sender: NSButton) {
+        setPreviewMode(sender.state == .on)
+    }
+
     private func setPreviewMode(_ on: Bool) {
         isPreviewMode = on
         if on {
@@ -598,6 +765,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
         editorScroll.isHidden = on
         previewScroll.isHidden = !on
         previewSegment.selectedSegment = on ? 1 : 0
+        compactPreviewButton?.state = on ? .on : .off
+        compactPreviewButton?.image = NSImage(
+            systemSymbolName: on ? "doc.richtext" : "square.and.pencil",
+            accessibilityDescription: on ? "Preview" : "Edit"
+        )
         if !on { window.makeFirstResponder(textView) }
     }
 
